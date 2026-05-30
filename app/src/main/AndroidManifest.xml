@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- ==================== PERMISSIONS ==================== -->
+
+    <!-- Internet -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Location (for GPS and geofencing) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- Camera (for FPV and video) -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Audio (for voice notifications) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- File access -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+
+    <!-- Bluetooth (for controller connection) -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+
+    <!-- Notifications -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Hardware features -->
+    <uses-feature android:name="android.hardware.location.gps" />
+    <uses-feature android:name="android.hardware.camera" />
+    <uses-feature android:name="android.hardware.bluetooth" />
+
+    <!-- ==================== APPLICATION ==================== -->
+
+    <application
+        android:name="com.example.dn_26.DroneXApp"
+        android:allowBackup="true"
+        android:icon="@drawable/edit_text_background"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="false"
+        android:theme="@style/Theme.DroneXPro"
+        android:usesCleartextTraffic="true">
+
+        <!-- ==================== ACTIVITIES ==================== -->
+
+        <!-- Main Activity -->
+        <activity
+            android:name="com.example.dn_26.MainActivity"
+            android:exported="true"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- ==================== CONFIGURATION ==================== -->
+
+        <!-- Keep screen on for drone flight -->
+        <meta-data
+            android:name="android.max_aspect"
+            android:value="2.4" />
+
+    </application>
+
+</manifest>

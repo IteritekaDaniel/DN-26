@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary Colors -->
+    <color name="primary">#0A0E27</color>
+    <color name="primary_dark">#050610</color>
+    <color name="primary_light">#1A1E37</color>
+
+    <!-- Accent Colors -->
+    <color name="accent">#00D4FF</color>
+    <color name="accent_dark">#00A8CC</color>
+    <color name="accent_light">#33DDFF</color>
+
+    <!-- Secondary Colors -->
+    <color name="secondary">#7C3AED</color>
+    <color name="secondary_dark">#6D28D9</color>
+    <color name="secondary_light">#A78BFA</color>
+
+    <!-- Success/Status Colors -->
+    <color name="success">#10B981</color>
+    <color name="success_light">#6EE7B7</color>
+    <color name="warning">#F59E0B</color>
+    <color name="error">#EF4444</color>
+    <color name="critical">#DC2626</color>
+
+    <!-- Neutral Colors -->
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+    <color name="gray_50">#F9FAFB</color>
+    <color name="gray_100">#F3F4F6</color>
+    <color name="gray_200">#E5E7EB</color>
+    <color name="gray_300">#D1D5DB</color>
+    <color name="gray_400">#9CA3AF</color>
+    <color name="gray_500">#6B7280</color>
+    <color name="gray_600">#4B5563</color>
+    <color name="gray_700">#374151</color>
+    <color name="gray_800">#1F2937</color>
+    <color name="gray_900">#111827</color>
+
+    <!-- Semi-transparent overlays -->
+    <color name="overlay_dark">#B3000000</color>
+    <color name="overlay_light">#B3FFFFFF</color>
+
+    <!-- Battery Status Colors -->
+    <color name="battery_full">#10B981</color>
+    <color name="battery_warning">#F59E0B</color>
+    <color name="battery_critical">#EF4444</color>
+
+    <!-- Temperature Colors -->
+    <color name="temp_cold">#3B82F6</color>
+    <color name="temp_normal">#10B981</color>
+    <color name="temp_warm">#F59E0B</color>
+    <color name="temp_hot">#EF4444</color>
+
+    <!-- GPS Signal Colors -->
+    <color name="signal_weak">#EF4444</color>
+    <color name="signal_fair">#F59E0B</color>
+    <color name="signal_good">#10B981</color>
+    <color name="signal_excellent">#00D4FF</color>
+
+    <!-- Professional Edition Palette (DroneX Pro) -->
+    <color name="pro_primary_dark">#00D4FF</color>
+    <color name="pro_primary_light">#0085D0</color>
+    <color name="pro_background_dark">#0A0E27</color>
+    <color name="pro_background_light">#F8F9FA</color>
+    <color name="pro_surface_dark">#1A1E37</color>
+    <color name="pro_surface_light">#FFFFFF</color>
+    <color name="pro_success">#10B981</color>
+    <color name="pro_warning">#F59E0B</color>
+    <color name="pro_error">#EF4444</color>
+    <color name="pro_info">#3B82F6</color>
+    <color name="pro_purple">#7C3AED</color>
+    <color name="pro_pink">#EC4899</color>
+    <color name="pro_green_accent">#34D399</color>
+    <color name="pro_orange_accent">#F97316</color>
+</resources>

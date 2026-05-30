@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- DroneX Pro Dark Theme -->
+    <style name="Theme.DroneXPro" parent="android:Theme.Material.NoActionBar">
+        <!-- Primary brand color -->
+        <item name="android:colorPrimary">@color/primary</item>
+        <item name="android:colorPrimaryDark">@color/primary_dark</item>
+        <item name="android:colorAccent">@color/accent</item>
+
+        <!-- Status bar styling -->
+        <item name="android:statusBarColor">@color/primary_dark</item>
+        <item name="android:windowLightStatusBar">false</item>
+
+        <!-- Navigation bar styling -->
+        <item name="android:navigationBarColor">@color/primary</item>
+        <item name="android:windowLightNavigationBar">false</item>
+
+        <!-- Window properties -->
+        <item name="android:windowBackground">@color/primary</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowFullscreen">false</item>
+
+        <!-- Text colors -->
+        <item name="android:textColorPrimary">@color/white</item>
+        <item name="android:textColorSecondary">@color/gray_400</item>
+
+        <!-- Button styles -->
+        <item name="android:buttonStyle">@style/DroneXButton</item>
+        <item name="android:editTextStyle">@style/DroneXEditText</item>
+    </style>
+
+    <!-- Button style -->
+    <style name="DroneXButton" parent="android:Widget.Material.Button">
+        <item name="android:textColor">@color/primary</item>
+        <item name="android:background">@color/accent</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:padding">12dp</item>
+        <item name="android:textAllCaps">false</item>
+    </style>
+
+    <!-- EditText style -->
+    <style name="DroneXEditText" parent="android:Widget.Material.EditText">
+        <item name="android:textColor">@color/white</item>
+        <item name="android:textColorHint">@color/gray_500</item>
+        <item name="android:background">@drawable/edit_text_background</item>
+        <item name="android:padding">12dp</item>
+    </style>
+
+    <!-- Text appearance -->
+    <style name="TextAppearance.DroneX.Headline" parent="android:TextAppearance.Material.Headline">
+        <item name="android:textColor">@color/white</item>
+        <item name="android:textSize">24sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+
+    <style name="TextAppearance.DroneX.Title" parent="android:TextAppearance.Material.Title">
+        <item name="android:textColor">@color/white</item>
+        <item name="android:textSize">20sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+
+    <style name="TextAppearance.DroneX.Body" parent="android:TextAppearance.Material.Body1">
+        <item name="android:textColor">@color/white</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+
+    <style name="TextAppearance.DroneX.Small" parent="android:TextAppearance.Material.Body2">
+        <item name="android:textColor">@color/gray_400</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+
+    <!-- Compose Integration Theme -->
+    <style name="Theme.DroneXPro.Compose" parent="Theme.DroneXPro">
+        <!-- Compose uses Material 3 colors -->
+        <item name="colorPrimary">@color/primary</item>
+        <item name="colorSecondary">@color/secondary</item>
+        <item name="colorTertiary">@color/accent</item>
+    </style>
+
+</resources>

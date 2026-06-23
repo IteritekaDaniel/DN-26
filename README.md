@@ -1,0 +1,189 @@
+# DroneX — Documentation complète (FR)
+
+Version : 1.0.0  
+Dépôt : IteritekaDaniel/DN-26  
+Description : Application Android (Kotlin + Jetpack Compose) pour gestion/interaction avec des drones (DRONE APP).
+
+## Qu'est-ce que c'est
+DroneX est une application Android écrite en Kotlin utilisant Jetpack Compose pour l'interface, Retrofit/OkHttp pour la communication réseau, Room pour le stockage local et Kotlin Coroutines pour la concurrence. L'application communique avec deux endpoints principaux : un backend API et un service AI.
+
+### Stack
+- Langage : Kotlin (JVM target 17)
+- Plateforme : Android SDK 34 (minSdk 26)
+- UI : Jetpack Compose (Compose BOM)
+- Notable bibliothèques :
+  - Retrofit + OkHttp (réseau)
+  - kotlinx-serialization (JSON)
+  - Room (base locale, KSP)
+  - Kotlin Coroutines
+  - AndroidX Lifecycle & ViewModel
+  - Timber (logging)
+
+## Organisation du dépôt (top-level)
+Le projet suit une structure de module Android standard. Arborescence principale utile :
+```
+.gitignore
+.idea/                       -> configuration IDE (ne pas commiter infos sensibles)
+app/                         -> module Android principal
+  build.gradle.kts           -> configuration Gradle du module (API_BASE_URL, API_KEY, debug/release)
+  proguard-rules.pro         -> règles de minification pour release
+  src/
+    main/
+      AndroidManifest.xml
+      java/com/example/dn_26/
+        DroneXApp.kt         -> classe Application (initialisation globale)
+        MainActivity.kt      -> Activity principale (navigation Compose)
+        ai/                  -> logique client AI / endpoints
+        alert/               -> gestion alertes / notifications
+        data/                -> repositories, Room entities, DAO
+        domain/              -> entités métier / use-cases
+        drone/               -> modèles et logique drone
+        presentation/        -> composables, écrans, viewmodels
+        utils/               -> utilitaires
+build.gradle.kts             -> configuration racine (constantes BuildConfig)
+gradle/                      -> wrapper gradle local
+gradlew, gradlew.bat         -> gradle wrapper (Unix/Windows)
+settings.gradle.kts
+hs_err_pid1680.log           -> log d'erreur JVM (peut être supprimé)
+```
+
+Comment ça s’assemble (flux runtime)
+- Au lancement, `DroneXApp` initialise les singletons et Timber. `MainActivity` héberge la navigation Compose. Les écrans consomment des ViewModels qui appellent les repositories (package `data`) pour obtenir des données depuis Retrofit (réseau) ou Room (local). Les endpoints et clés sont fournis via `buildConfigField` dans `app/build.gradle.kts` (différents pour debug/release).
+
+## Fichiers clés à connaître
+- `app/src/main/AndroidManifest.xml` — permissions et activities.
+- `app/src/main/java/com/example/dn_26/DroneXApp.kt` — initialisation (ex: Timber, DI).
+- `app/src/main/java/com/example/dn_26/MainActivity.kt` — point d’entrée UI.
+- `app/build.gradle.kts` — dépendances, `buildConfigField` (API_BASE_URL, AI_API_BASE_URL, API_KEY, DEBUG_MODE).
+- `app/proguard-rules.pro` — règles pour release.
+
+## Variables de build importantes
+Dans `app/build.gradle.kts` il existe des champs build config :
+- Debug :
+  - API_BASE_URL = "http://localhost:8080/v1/"
+  - AI_API_BASE_URL = "http://localhost:8081/v1/"
+  - API_KEY = "dev_key_here"
+  - DEBUG_MODE = true
+- Release :
+  - API_BASE_URL = "https://api.dronex.cloud/v1/"
+  - AI_API_BASE_URL = "https://ai.dronex.cloud/v1/"
+  - API_KEY = "prod_key_here"
+  - DEBUG_MODE = false
+
+Important : évitez de commiter des clés réelles. Voir la section "Sécurité".
+
+## Prérequis pour le développement
+- JDK 17
+- Android SDK (platform-tools, build-tools pour API 34)
+- Android Studio (recommandé) ou accès au Gradle wrapper (`./gradlew`)
+- Un appareil Android (minSdk 26) ou AVD (API 34)
+- `adb` (inclus dans platform-tools)
+
+## Installation et exécution — Mode développeur (pas à pas)
+Ces instructions expliquent comment installer l'APK sur un appareil Android en mode développeur.
+
+A. Activer le mode développeur sur l’appareil
+1. Paramètres -> À propos du téléphone -> Tapez 7 fois sur "Numéro de build" pour activer les Options pour les développeurs.
+2. Paramètres -> Options pour les développeurs -> activer "Débogage USB".
+3. Connectez l'appareil au PC via USB. Acceptez l'autorisation RSA si demandé.
+
+B. Construire l’application (debug)
+Depuis la racine du repo :
+- Unix/macOS :
+  - ./gradlew assembleDebug
+- Windows :
+  - gradlew.bat assembleDebug
+
+C. Installer l’APK (adb)
+1. Vérifier appareil :
+   - adb devices
+2. Installer :
+   - adb install -r app/build/outputs/apk/debug/app-debug.apk
+   - Option -r : replace (écrase si déjà installée)
+3. Lancer l'app (si nécessaire) :
+   - adb shell am start -n com.example.dn_26/.MainActivity
+
+D. Alternative : builder + installer en une commande
+- ./gradlew installDebug  (assemble et installe automatiquement sur l'appareil connecté)
+
+E. Remarques réseau (localhost)
+- Émulateur Android (AVD) : utiliser 10.0.2.2 pour atteindre le localhost du PC.
+  - Exemple : http://10.0.2.2:8080/v1/
+- Appareil physique : utiliser l’adresse IP de la machine dev (ex: http://192.168.0.12:8080) ou un tunnel (ngrok) et mettre à jour `API_BASE_URL` en conséquence.
+
+## Exemple : config rapide pour développement local
+- Si vous utilisez l’émulateur AVD, remplacez dans `app/build.gradle.kts` (debug) :
+  - API_BASE_URL = "\"http://10.0.2.2:8080/v1/\""
+  - AI_API_BASE_URL = "\"http://10.0.2.2:8081/v1/\""
+- Ou créez un `local.properties` / `gradle.properties` non commité et référencer ces valeurs dans le build (recommandé).
+
+Exemple (à placer dans `~/.gradle/gradle.properties` ou `gradle.properties` non commité) :
+```
+DRONEX_API_BASE_URL=http://10.0.2.2:8080/v1/
+DRONEX_AI_API_BASE_URL=http://10.0.2.2:8081/v1/
+DRONEX_API_KEY=dev_key_here
+```
+Puis adapter `app/build.gradle.kts` pour lire ces propriétés.
+
+## Exécution des tests
+- Tests unitaires :
+  - ./gradlew test
+- Tests instrumentés (sur appareil/émulateur) :
+  - ./gradlew connectedAndroidTest
+
+## Debug & logs
+- Afficher logs en direct :
+  - adb logcat
+- Filtrer sur le package :
+  - adb logcat | grep -i dn_26
+- L’application utilise Timber ; vérifiez l’initialisation dans `DroneXApp.kt` pour la configuration de log (release vs debug).
+
+## Build release & signature
+1. Générer keystore (exemple) :
+   - keytool -genkey -v -keystore release-keystore.jks -alias dronex -keyalg RSA -keysize 2048 -validity 10000
+2. Ajouter `signingConfigs` dans `app/build.gradle.kts` (utiliser des propriétés non commitées pour mot de passe/alias).
+3. Assembler :
+   - ./gradlew assembleRelease
+4. L’APK signé se trouve dans :
+   - app/build/outputs/apk/release/app-release.apk
+
+## Sécurité & bonnes pratiques
+- Ne pas commiter de clés sensibles (API_KEY). Utiliser :
+  - `gradle.properties` local non commité
+  - variables d’environnement injectées au build
+  - ou vault / secret manager
+- Revoir `proguard-rules.pro` si vous utilisez reflection ou serialization (kotlinx) — sinon la minification peut casser la (dé)sérialisation.
+- Nettoyer les logs/stack traces sensibles avant partage.
+
+## Dépannage courant
+- Build échoue : vérifier JDK 17 en utilisant `java -version`.
+- Erreurs réseau lors de tests sur appareil physique : vérifier l’IP du PC et la connectivité (pare-feu).
+- Classe manquante en release : ajouter règle proguard pour conserver les modèles serializers/DAOs.
+
+## Commandes utiles (récapitulatif)
+- Cloner :
+  - git clone https://github.com/IteritekaDaniel/DN-26.git
+- Build debug :
+  - ./gradlew assembleDebug
+- Installer debug :
+  - adb install -r app/build/outputs/apk/debug/app-debug.apk
+- Installer + run :
+  - ./gradlew installDebug
+- Lancer activity :
+  - adb shell am start -n com.example.dn_26/.MainActivity
+- Voir logs :
+  - adb logcat
+
+## Suggestions d'améliorations pour le repo
+- Ajouter ce README.md dans la racine (je peux le commiter pour vous si vous souhaitez).
+- Mettre en place un mécanisme de configuration runtime (assets/config.json) pour éviter de recompiler pour changer les URLs.
+- Externaliser les clés dans `gradle.properties` non commité.
+- Ajouter un script `scripts/install-dev.sh` (fourni ci-dessous) pour automatiser build + install + run.
+- Nettoyer / supprimer le fichier `hs_err_pid1680.log` si non nécessaire.
+
+---
+
+Si vous voulez, je peux :
+- Committer ce README.md dans la racine du repo pour vous (il faudra confirmer).
+- Ajouter aussi le script `install-dev.sh` au repo (ou dans `scripts/`) et ouvrir une Pull Request.
+- Adapter le README pour inclure captures d’écran, diagrammes d’architecture ou un guide pas-à-pas pour configurer un backend local.

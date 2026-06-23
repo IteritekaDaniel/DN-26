@@ -1,5 +1,7 @@
 package com.example.dn_26.presentation.ui.screen
 
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -25,31 +27,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BatteryFull
-import androidx.compose.material.icons.filled.FlightLand
-import androidx.compose.material.icons.filled.FlightTakeoff
 import androidx.compose.material.icons.filled.GpsFixed
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.PauseCircle
-import androidx.compose.material.icons.filled.PlayCircle
-import androidx.compose.material.icons.filled.Radar
-import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.StopCircle
-import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.VerticalAlignTop
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ScrollableTabRow
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -59,6 +47,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -70,16 +59,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import com.example.dn_26.domain.model.ConnectionMode
+import com.example.dn_26.domain.model.ConnectionProfile
 import com.example.dn_26.domain.model.DroneCommand
 import com.example.dn_26.domain.model.Telemetry
 import com.example.dn_26.presentation.ui.theme.DroneXColors
 import com.example.dn_26.presentation.viewmodel.DroneControlState
-import kotlin.math.PI
-import kotlin.math.atan2
-import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.roundToInt
-import kotlin.math.sin
 import kotlin.math.sqrt
 
 @Composable
@@ -95,18 +83,21 @@ fun AdvancedFlightControlScreen(
     onControllerTuningChange: (Float, Float, Float) -> Unit = { _, _, _ -> },
     onSendJoystick: (Float, Float, Float, Float) -> Unit = { _, _, _, _ -> }
 ) {
-    val modes = listOf("STABILIZE", "ALT HOLD", "LOITER", "RTL", "AUTO", "FOLLOW", "LAND")
-    var selectedMode by remember { mutableStateOf(droneState.flightMode) }
-    var leftOffset by remember { mutableStateOf(Offset.Zero) }
-    var rightOffset by remember { mutableStateOf(Offset.Zero) }
-
-    LaunchedEffect(droneState.flightMode) {
-        selectedMode = droneState.flightMode
+    val modes = listOf("PRECISION", "SPORT", "CINEMA", "INSPECT")
+    var selectedMode by remember { mutableStateOf(droneState.controllerTuning.preset) }
+    var leftStick by remember { mutableStateOf(Offset.Zero) }
+    var rightStick by remember { mutableStateOf(Offset.Zero) }
+    val streamUrl = remember(droneState.connectionProfile) {
+        droneState.connectionProfile.defaultPilotStreamUrl()
     }
 
-    fun dispatchJoystick(newLeft: Offset = leftOffset, newRight: Offset = rightOffset) {
-        leftOffset = newLeft
-        rightOffset = newRight
+    LaunchedEffect(droneState.controllerTuning.preset) {
+        selectedMode = droneState.controllerTuning.preset
+    }
+
+    fun dispatch(newLeft: Offset = leftStick, newRight: Offset = rightStick) {
+        leftStick = newLeft
+        rightStick = newRight
         onSendJoystick(
             newRight.x,
             newRight.y,
@@ -118,614 +109,424 @@ fun AdvancedFlightControlScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        DroneXColors.BackgroundDark,
-                        Color(0xFF101715),
-                        Color(0xFF17140F)
-                    )
-                )
-            )
+            .background(PilotStageBrush)
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            PilotHeader(
-                droneState = droneState,
-                selectedMode = selectedMode,
-                onBackClick = onNavigateBack,
-                onEmergencyStop = onEmergencyStop,
-                onUnlockSafety = onUnlockSafety
-            )
+        PilotFpvView(streamUrl = streamUrl, modifier = Modifier.fillMaxSize())
 
-            ScrollableTabRow(
-                selectedTabIndex = modes.indexOf(selectedMode).coerceAtLeast(0),
-                containerColor = Color.Transparent,
-                contentColor = DroneXColors.PrimaryAccent,
-                edgePadding = 16.dp,
-                divider = {}
-            ) {
-                modes.forEach { mode ->
-                    Tab(
-                        selected = selectedMode == mode,
-                        onClick = {
-                            selectedMode = mode
-                            onFlightModeChange(mode)
-                            if (mode == "RTL") onCommand(DroneCommand.RETURN_HOME)
-                            if (mode == "LAND") onCommand(DroneCommand.LAND)
-                        },
-                        text = {
-                            Text(
-                                mode,
-                                color = if (selectedMode == mode) DroneXColors.PrimaryAccent else Color.White.copy(alpha = 0.45f),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
-                            )
-                        }
-                    )
+        PilotTopHud(
+            droneState = droneState,
+            telemetry = telemetry,
+            selectedMode = selectedMode,
+            modes = modes,
+            onModeSelected = { mode ->
+                selectedMode = mode
+                onControllerPresetChange(mode)
+                onFlightModeChange(
+                    when (mode) {
+                        "SPORT" -> "SPORT"
+                        "CINEMA" -> "CINEMA"
+                        "INSPECT" -> "LOITER"
+                        else -> "STABILIZE"
+                    }
+                )
+            },
+            onBack = onNavigateBack,
+            onEmergencyStop = onEmergencyStop
+        )
+
+        GameLeftCluster(
+            value = leftStick,
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 26.dp, bottom = 28.dp),
+            onStick = { dispatch(newLeft = it) },
+            onL1 = { onCommand(if (droneState.isArmed) DroneCommand.DISARM else DroneCommand.ARM) },
+            onL2 = { onCommand(DroneCommand.CALIBRATE) }
+        )
+
+        GameRightCluster(
+            value = rightStick,
+            isRecording = droneState.isRecording,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 26.dp, bottom = 28.dp),
+            onStick = { dispatch(newRight = it) },
+            onButton = { label ->
+                when (label) {
+                    "A" -> onCommand(DroneCommand.TAKEOFF)
+                    "B" -> onCommand(DroneCommand.LAND)
+                    "X" -> onCommand(DroneCommand.HOVER)
+                    "Y" -> onCommand(DroneCommand.RETURN_HOME)
+                    "REC" -> onCommand(if (droneState.isRecording) DroneCommand.STOP_RECORDING else DroneCommand.START_RECORDING)
                 }
             }
+        )
 
-            MiniTelemetryBar(telemetry = telemetry, droneState = droneState)
-
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                PilotSidePanel(
-                    telemetry = telemetry,
-                    droneState = droneState,
-                    onCommand = onCommand,
-                    onControllerPresetChange = onControllerPresetChange,
-                    onControllerTuningChange = onControllerTuningChange,
-                    modifier = Modifier
-                        .width(210.dp)
-                        .fillMaxHeight()
-                )
-
-                VirtualJoystick(
-                    label = "Throttle / Yaw",
-                    color = DroneXColors.Warning,
-                    value = leftOffset,
-                    onOffsetChanged = { dispatchJoystick(newLeft = it) }
-                )
-
-                FlightAttitudeInstrument(
-                    telemetry = telemetry,
-                    modifier = Modifier.size(230.dp)
-                )
-
-                VirtualJoystick(
-                    label = "Pitch / Roll",
-                    color = DroneXColors.PrimaryAccent,
-                    value = rightOffset,
-                    onOffsetChanged = { dispatchJoystick(newRight = it) }
-                )
-
-                PilotSidePanelRight(
-                    droneState = droneState,
-                    onCommand = onCommand,
-                    modifier = Modifier
-                        .width(210.dp)
-                        .fillMaxHeight()
-                )
-            }
-
-            PilotBottomActions(
-                droneState = droneState,
-                onCommand = onCommand
-            )
-        }
+        PilotBottomStrip(
+            droneState = droneState,
+            telemetry = telemetry,
+            leftStick = leftStick,
+            rightStick = rightStick,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 18.dp)
+        )
 
         if (droneState.safetyLock) {
-            EmergencyOverlay(onUnlockSafety)
+            SafetyOverlay(onUnlockSafety)
         }
     }
 }
 
 @Composable
-private fun PilotHeader(
+private fun PilotFpvView(streamUrl: String, modifier: Modifier = Modifier) {
+    Box(modifier = modifier.background(PilotStageBrush), contentAlignment = Alignment.Center) {
+        if (streamUrl.isBlank()) {
+            Surface(
+                color = PilotPanel.copy(alpha = 0.82f),
+                shape = RoundedCornerShape(18.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, PilotStroke.copy(alpha = 0.7f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 22.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(Icons.Default.Videocam, contentDescription = null, tint = Color(0xFFFFB74D), modifier = Modifier.size(54.dp))
+                    Text("FPV OFFLINE", color = PilotText, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                    Text("Connect WiFi ESP32-CAM stream", color = PilotMuted, fontSize = 12.sp)
+                }
+            }
+        } else {
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { context ->
+                    WebView(context).apply {
+                        setBackgroundColor(android.graphics.Color.BLACK)
+                        webViewClient = WebViewClient()
+                        settings.javaScriptEnabled = false
+                        settings.domStorageEnabled = false
+                        settings.loadWithOverviewMode = true
+                        settings.useWideViewPort = true
+                        loadUrl(streamUrl)
+                    }
+                },
+                update = { webView ->
+                    if (webView.url != streamUrl) webView.loadUrl(streamUrl)
+                }
+            )
+        }
+
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val center = Offset(size.width / 2, size.height / 2)
+            drawCircle(Color.White.copy(alpha = 0.2f), 4.dp.toPx(), center)
+            drawLine(
+                Color.White.copy(alpha = 0.2f),
+                Offset(center.x - 42.dp.toPx(), center.y),
+                Offset(center.x - 12.dp.toPx(), center.y),
+                strokeWidth = 1.4.dp.toPx(),
+                cap = StrokeCap.Round
+            )
+            drawLine(
+                Color.White.copy(alpha = 0.2f),
+                Offset(center.x + 12.dp.toPx(), center.y),
+                Offset(center.x + 42.dp.toPx(), center.y),
+                strokeWidth = 1.4.dp.toPx(),
+                cap = StrokeCap.Round
+            )
+        }
+    }
+}
+
+@Composable
+private fun PilotTopHud(
     droneState: DroneControlState,
+    telemetry: Telemetry?,
     selectedMode: String,
-    onBackClick: () -> Unit,
-    onEmergencyStop: () -> Unit,
-    onUnlockSafety: () -> Unit
+    modes: List<String>,
+    onModeSelected: (String) -> Unit,
+    onBack: () -> Unit,
+    onEmergencyStop: () -> Unit
 ) {
+    Surface(
+        color = PilotPanel.copy(alpha = 0.88f),
+        shape = RoundedCornerShape(bottomStart = 14.dp, bottomEnd = 14.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, PilotStroke.copy(alpha = 0.6f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = PilotText)
+                }
+                HudPill(Icons.Default.Videocam, droneState.droneState.name)
+                HudPill(Icons.Default.Speed, "${telemetry?.speed?.let { (it * 3.6).roundToInt() } ?: 0} km/h")
+                HudPill(Icons.Default.GpsFixed, "${telemetry?.gpsSatellites ?: 0} SAT")
+                HudPill(Icons.Default.BatteryFull, "${droneState.batteryLevel}%")
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                modes.forEach { mode ->
+                    FilterChip(
+                        selected = selectedMode == mode,
+                        onClick = { onModeSelected(mode) },
+                        label = { Text(mode.take(4), fontSize = 10.sp, fontWeight = FontWeight.Black) }
+                    )
+                }
+                Button(
+                    onClick = onEmergencyStop,
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = DroneXColors.Critical)
+                ) {
+                    Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text("STOP", fontWeight = FontWeight.Black, fontSize = 12.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HudPill(icon: ImageVector, text: String) {
     Row(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .padding(horizontal = 4.dp)
+            .background(PilotPanelHigh.copy(alpha = 0.9f), RoundedCornerShape(18.dp))
+            .border(1.dp, PilotStroke.copy(alpha = 0.4f), RoundedCornerShape(18.dp))
+            .padding(horizontal = 9.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBackClick) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
-            }
-            Column {
-                Text("Pilot Command", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
-                Text(
-                    "${droneState.droneState.name} | $selectedMode | ${droneState.connectionProfile.mode.name}",
-                    color = Color.White.copy(alpha = 0.58f),
-                    fontSize = 11.sp
-                )
-            }
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Button(
-                onClick = onUnlockSafety,
-                enabled = droneState.safetyLock,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = DroneXColors.Success.copy(alpha = 0.18f),
-                    contentColor = DroneXColors.Success
-                ),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Text("UNLOCK", fontWeight = FontWeight.Black)
-            }
-            Button(
-                onClick = onEmergencyStop,
-                colors = ButtonDefaults.buttonColors(containerColor = DroneXColors.Critical),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("E-STOP", fontWeight = FontWeight.Black)
-            }
-        }
+        Icon(icon, contentDescription = null, tint = Color(0xFFFFB74D), modifier = Modifier.size(14.dp))
+        Spacer(Modifier.width(5.dp))
+        Text(text, color = PilotText, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
     }
 }
 
 @Composable
-private fun PilotSidePanel(
-    telemetry: Telemetry?,
-    droneState: DroneControlState,
-    onCommand: (DroneCommand) -> Unit,
-    onControllerPresetChange: (String) -> Unit,
-    onControllerTuningChange: (Float, Float, Float) -> Unit,
-    modifier: Modifier = Modifier
+private fun GameLeftCluster(
+    value: Offset,
+    modifier: Modifier,
+    onStick: (Offset) -> Unit,
+    onL1: () -> Unit,
+    onL2: () -> Unit
 ) {
-    Surface(color = DroneXColors.SurfaceDark.copy(alpha = 0.9f), shape = RoundedCornerShape(10.dp), modifier = modifier) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Motor Stack", color = Color.White, fontWeight = FontWeight.Black)
-            MotorBar("M1", telemetry?.speed?.toFloat() ?: 0f, DroneXColors.PrimaryAccent)
-            MotorBar("M2", (telemetry?.speed?.toFloat() ?: 0f) * 0.92f, DroneXColors.GreenAccent)
-            MotorBar("M3", (telemetry?.speed?.toFloat() ?: 0f) * 1.05f, DroneXColors.Warning)
-            MotorBar("M4", (telemetry?.speed?.toFloat() ?: 0f) * 0.98f, DroneXColors.Info)
-
-            Spacer(Modifier.height(8.dp))
-            PilotAction(
-                icon = Icons.Default.Shield,
-                label = if (droneState.isArmed) "Disarm Motors" else "Arm Motors",
-                color = DroneXColors.PrimaryAccent
-            ) {
-                onCommand(if (droneState.isArmed) DroneCommand.DISARM else DroneCommand.ARM)
-            }
-            PilotAction(Icons.Default.Sync, "Calibrate IMU", DroneXColors.GreenAccent) {
-                onCommand(DroneCommand.CALIBRATE)
-            }
-
-            ControllerTuningPanel(
-                droneState = droneState,
-                onPresetChange = onControllerPresetChange,
-                onTuningChange = onControllerTuningChange
-            )
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ShoulderButton("L1", DroneXColors.PrimaryAccent, onL1)
+            ShoulderButton("L2", DroneXColors.Warning, onL2)
         }
-    }
-}
-
-@Composable
-private fun PilotSidePanelRight(
-    droneState: DroneControlState,
-    onCommand: (DroneCommand) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(color = DroneXColors.SurfaceDark.copy(alpha = 0.9f), shape = RoundedCornerShape(10.dp), modifier = modifier) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Mission Actions", color = Color.White, fontWeight = FontWeight.Black)
-            PilotAction(Icons.Default.FlightTakeoff, "Takeoff", DroneXColors.Success) {
-                onCommand(DroneCommand.TAKEOFF)
-            }
-            PilotAction(Icons.Default.PauseCircle, "Hover Hold", DroneXColors.Info) {
-                onCommand(DroneCommand.HOVER)
-            }
-            PilotAction(Icons.Default.Home, "Return Home", DroneXColors.InfoBlue) {
-                onCommand(DroneCommand.RETURN_HOME)
-            }
-            PilotAction(Icons.Default.FlightLand, "Land", DroneXColors.Warning) {
-                onCommand(DroneCommand.LAND)
-            }
-            PilotAction(
-                icon = if (droneState.isRecording) Icons.Default.StopCircle else Icons.Default.PlayCircle,
-                label = if (droneState.isRecording) "Stop Recording" else "Start Recording",
-                color = DroneXColors.PinkAccent
-            ) {
-                onCommand(if (droneState.isRecording) DroneCommand.STOP_RECORDING else DroneCommand.START_RECORDING)
-            }
-        }
-    }
-}
-
-@Composable
-private fun ControllerTuningPanel(
-    droneState: DroneControlState,
-    onPresetChange: (String) -> Unit,
-    onTuningChange: (Float, Float, Float) -> Unit
-) {
-    val tuning = droneState.controllerTuning
-    val presets = listOf("PRECISION", "SPORT", "CINEMA", "INSPECT")
-
-    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        Text("Controller Profile", color = Color.White.copy(alpha = 0.72f), fontSize = 11.sp, fontWeight = FontWeight.Black)
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-            presets.forEach { preset ->
-                FilterChip(
-                    selected = tuning.preset == preset,
-                    onClick = { onPresetChange(preset) },
-                    label = { Text(preset.take(3), fontSize = 8.sp, fontWeight = FontWeight.Black) },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-
-        CompactSlider(
-            label = "SENS",
-            value = tuning.sensitivity,
-            range = 0.2f..1.25f,
+        GameStick(
+            label = "MOVE",
             color = DroneXColors.PrimaryAccent,
-            onValueChange = { onTuningChange(it, tuning.deadZone, tuning.expo) }
-        )
-        CompactSlider(
-            label = "DZ",
-            value = tuning.deadZone,
-            range = 0.02f..0.25f,
-            color = DroneXColors.Warning,
-            onValueChange = { onTuningChange(tuning.sensitivity, it, tuning.expo) }
-        )
-        CompactSlider(
-            label = "EXPO",
-            value = tuning.expo,
-            range = 0f..0.8f,
-            color = DroneXColors.GreenAccent,
-            onValueChange = { onTuningChange(tuning.sensitivity, tuning.deadZone, it) }
-        )
-
-        StickSignalMeter(droneState = droneState)
-    }
-}
-
-@Composable
-private fun CompactSlider(
-    label: String,
-    value: Float,
-    range: ClosedFloatingPointRange<Float>,
-    color: Color,
-    onValueChange: (Float) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            Text(label, color = Color.White.copy(alpha = 0.58f), fontSize = 9.sp, fontWeight = FontWeight.Bold)
-            Text(String.format("%.2f", value), color = color, fontSize = 9.sp, fontWeight = FontWeight.Black)
-        }
-        Slider(
             value = value,
-            onValueChange = onValueChange,
-            valueRange = range,
-            colors = SliderDefaults.colors(
-                thumbColor = color,
-                activeTrackColor = color,
-                inactiveTrackColor = Color.White.copy(alpha = 0.12f)
-            ),
-            modifier = Modifier.height(24.dp)
+            onChange = onStick
         )
     }
 }
 
 @Composable
-private fun StickSignalMeter(droneState: DroneControlState) {
-    val signal = droneState.lastStickSignal
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        SignalAxis("P", signal.pitch, DroneXColors.PrimaryAccent)
-        SignalAxis("R", signal.roll, DroneXColors.GreenAccent)
-        SignalAxis("T", signal.throttle, DroneXColors.Warning)
-        SignalAxis("Y", signal.yaw, DroneXColors.PinkAccent)
-    }
-}
-
-@Composable
-private fun SignalAxis(label: String, value: Float, color: Color) {
-    val animatedValue by animateFloatAsState(value.coerceIn(-1.25f, 1.25f), animationSpec = tween(140), label = "axis")
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-        Text(label, color = color, fontSize = 9.sp, fontWeight = FontWeight.Black, modifier = Modifier.width(12.dp))
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .height(6.dp)
-                .background(Color.Black.copy(alpha = 0.3f), RoundedCornerShape(4.dp))
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth((kotlin.math.abs(animatedValue) / 1.25f).coerceIn(0f, 1f))
-                    .align(if (animatedValue >= 0f) Alignment.CenterStart else Alignment.CenterEnd)
-                    .background(color, RoundedCornerShape(4.dp))
-            )
-        }
-    }
-}
-
-@Composable
-private fun PilotAction(
-    icon: ImageVector,
-    label: String,
-    color: Color,
-    onClick: () -> Unit
+private fun GameRightCluster(
+    value: Offset,
+    isRecording: Boolean,
+    modifier: Modifier,
+    onStick: (Offset) -> Unit,
+    onButton: (String) -> Unit
 ) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth().height(44.dp),
-        shape = RoundedCornerShape(8.dp),
-        contentPadding = PaddingValues(horizontal = 10.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = color.copy(alpha = 0.14f), contentColor = color)
-    ) {
-        Icon(icon, contentDescription = label, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-    }
-}
-
-@Composable
-private fun MotorBar(label: String, value: Float, color: Color) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            Text(label, color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            Text("${(900 + value * 45).roundToInt()} rpm", color = color, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-        }
-        androidx.compose.material3.LinearProgressIndicator(
-            progress = { ((value / 28f) + 0.12f).coerceIn(0f, 1f) },
-            modifier = Modifier.fillMaxWidth().height(5.dp),
-            color = color,
-            trackColor = Color.White.copy(alpha = 0.08f)
+    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.Bottom) {
+        GameStick(
+            label = "CAM",
+            color = DroneXColors.GreenAccent,
+            value = value,
+            onChange = onStick
         )
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            GameButton("Y", "RTL", Color(0xFFFACC15)) { onButton("Y") }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                GameButton("X", "HVR", Color(0xFF60A5FA)) { onButton("X") }
+                GameButton("B", "LAND", Color(0xFFF87171)) { onButton("B") }
+            }
+            GameButton("A", "UP", Color(0xFF34D399)) { onButton("A") }
+            GameButton(if (isRecording) "ON" else "REC", if (isRecording) "STOP" else "START", if (isRecording) DroneXColors.Critical else DroneXColors.PinkAccent) { onButton("REC") }
+        }
     }
 }
 
 @Composable
-private fun VirtualJoystick(
+private fun GameStick(
     label: String,
     color: Color,
     value: Offset,
-    onOffsetChanged: (Offset) -> Unit
+    onChange: (Offset) -> Unit
 ) {
-    var thumbOffset by remember { mutableStateOf(Offset.Zero) }
-    val radius = 94.dp
-    val stickIntensity = sqrt(thumbOffset.x.pow(2) + thumbOffset.y.pow(2)) / 94f
-    val animatedThumb by animateFloatAsState(
-        targetValue = (62f + stickIntensity.coerceIn(0f, 1f) * 10f),
+    var thumb by remember { mutableStateOf(Offset.Zero) }
+    val radius = 88.dp
+    val pulse by animateFloatAsState(
+        targetValue = if (value == Offset.Zero) 58f else 70f,
         animationSpec = tween(120),
-        label = "thumb_size"
+        label = "game_stick"
     )
 
-    LaunchedEffect(value) {
-        if (value == Offset.Zero) thumbOffset = Offset.Zero
-    }
-
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(label.uppercase(), color = color, fontSize = 11.sp, fontWeight = FontWeight.Black)
+    Box(
+        modifier = Modifier
+            .size(radius * 2)
+            .background(PilotPanel.copy(alpha = 0.45f), CircleShape)
+            .border(2.dp, color.copy(alpha = 0.6f), CircleShape)
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragEnd = {
+                        thumb = Offset.Zero
+                        onChange(Offset.Zero)
+                    },
+                    onDragCancel = {
+                        thumb = Offset.Zero
+                        onChange(Offset.Zero)
+                    },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        val next = thumb + dragAmount
+                        val distance = sqrt(next.x.pow(2) + next.y.pow(2))
+                        val maxDistance = radius.toPx()
+                        thumb = if (distance <= maxDistance) {
+                            next
+                        } else {
+                            Offset(next.x / distance * maxDistance, next.y / distance * maxDistance)
+                        }
+                        onChange(Offset(thumb.x / maxDistance, -thumb.y / maxDistance))
+                    }
+                )
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            val center = Offset(size.width / 2, size.height / 2)
+            drawCircle(color.copy(alpha = 0.12f), radius = size.minDimension / 2.9f, center = center)
+            drawLine(PilotText.copy(alpha = 0.2f), Offset(center.x, 0f), Offset(center.x, size.height), 1.dp.toPx())
+            drawLine(PilotText.copy(alpha = 0.2f), Offset(0f, center.y), Offset(size.width, center.y), 1.dp.toPx())
+        }
         Box(
             modifier = Modifier
-                .size(radius * 2)
-                .background(Color.Black.copy(alpha = 0.28f), CircleShape)
-                .border(1.dp, color.copy(alpha = 0.45f), CircleShape)
-                .pointerInput(Unit) {
-                    detectDragGestures(
-                        onDragEnd = {
-                            thumbOffset = Offset.Zero
-                            onOffsetChanged(Offset.Zero)
-                        },
-                        onDragCancel = {
-                            thumbOffset = Offset.Zero
-                            onOffsetChanged(Offset.Zero)
-                        },
-                        onDrag = { change, dragAmount ->
-                            change.consume()
-                            val next = thumbOffset + dragAmount
-                            val distance = sqrt(next.x.pow(2) + next.y.pow(2))
-                            val maxDistance = radius.toPx()
-                            thumbOffset = if (distance <= maxDistance) {
-                                next
-                            } else {
-                                Offset(next.x / distance * maxDistance, next.y / distance * maxDistance)
-                            }
-                            onOffsetChanged(Offset(thumbOffset.x / maxDistance, -thumbOffset.y / maxDistance))
-                        }
-                    )
-                },
+                .offset { IntOffset(thumb.x.toInt(), thumb.y.toInt()) }
+                .size(pulse.dp)
+                .background(
+                    brush = Brush.radialGradient(listOf(color, color.copy(alpha = 0.65f))),
+                    shape = CircleShape
+                )
+                .border(1.dp, Color.White.copy(alpha = 0.6f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val center = Offset(size.width / 2, size.height / 2)
-                drawCircle(color.copy(alpha = 0.08f), radius = size.minDimension / 2.5f, center = center, style = Stroke(1.dp.toPx()))
-                drawLine(Color.White.copy(alpha = 0.12f), Offset(0f, center.y), Offset(size.width, center.y), strokeWidth = 1.dp.toPx())
-                drawLine(Color.White.copy(alpha = 0.12f), Offset(center.x, 0f), Offset(center.x, size.height), strokeWidth = 1.dp.toPx())
-            }
-
-            Box(
-                modifier = Modifier
-                    .offset { IntOffset(thumbOffset.x.toInt(), thumbOffset.y.toInt()) }
-                    .size(animatedThumb.dp)
-                    .background(
-                        brush = Brush.radialGradient(listOf(color, color.copy(alpha = 0.42f))),
-                        shape = CircleShape
-                    )
-                    .border(1.dp, Color.White.copy(alpha = 0.5f), CircleShape)
-            )
+            Text(label, color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Black)
         }
     }
 }
 
 @Composable
-private fun FlightAttitudeInstrument(
-    telemetry: Telemetry?,
-    modifier: Modifier = Modifier
-) {
-    val pitch = telemetry?.pitch ?: 0.0
-    val roll = telemetry?.roll ?: 0.0
-    val yaw = telemetry?.yaw ?: 0.0
-
-    Box(modifier = modifier, contentAlignment = Alignment.Center) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val center = Offset(size.width / 2, size.height / 2)
-            val radius = size.minDimension / 2
-            drawCircle(Color.Black.copy(alpha = 0.28f), radius, center)
-            drawCircle(DroneXColors.PrimaryAccent.copy(alpha = 0.2f), radius - 2.dp.toPx(), center, style = Stroke(1.dp.toPx()))
-
-            for (angle in 0 until 360 step 30) {
-                val rad = (angle - 90) * PI / 180.0
-                val outer = Offset(center.x + cos(rad).toFloat() * radius * 0.92f, center.y + sin(rad).toFloat() * radius * 0.92f)
-                val inner = Offset(center.x + cos(rad).toFloat() * radius * 0.78f, center.y + sin(rad).toFloat() * radius * 0.78f)
-                drawLine(Color.White.copy(alpha = 0.2f), inner, outer, strokeWidth = 1.5.dp.toPx(), cap = StrokeCap.Round)
-            }
-
-            val rollOffset = (roll / 45.0).toFloat().coerceIn(-1f, 1f) * radius * 0.25f
-            val pitchOffset = (pitch / 45.0).toFloat().coerceIn(-1f, 1f) * radius * 0.42f
-            drawLine(
-                DroneXColors.Warning,
-                Offset(center.x - radius * 0.7f, center.y + pitchOffset + rollOffset),
-                Offset(center.x + radius * 0.7f, center.y + pitchOffset - rollOffset),
-                strokeWidth = 4.dp.toPx(),
-                cap = StrokeCap.Round
-            )
-            drawCircle(DroneXColors.PrimaryAccent, 5.dp.toPx(), center)
-        }
-
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("HEADING", color = Color.White.copy(alpha = 0.45f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            Text("${yaw.roundToInt()} deg", color = Color.White, fontWeight = FontWeight.Black, fontSize = 26.sp)
-            Text("P ${pitch.roundToInt()}  R ${roll.roundToInt()}", color = DroneXColors.PrimaryAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-@Composable
-private fun MiniTelemetryBar(
-    telemetry: Telemetry?,
-    droneState: DroneControlState
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .background(DroneXColors.SurfaceDark.copy(alpha = 0.72f), RoundedCornerShape(8.dp))
-            .padding(vertical = 8.dp, horizontal = 12.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        TelemetryItem(Icons.Default.VerticalAlignTop, "${telemetry?.altitude?.roundToInt() ?: 0} m")
-        TelemetryItem(Icons.Default.Speed, "${telemetry?.speed?.let { (it * 3.6).roundToInt() } ?: 0} km/h")
-        TelemetryItem(Icons.Default.Radar, "${telemetry?.yaw?.roundToInt() ?: 0} deg")
-        TelemetryItem(Icons.Default.GpsFixed, "${telemetry?.gpsSatellites ?: 0} sats")
-        TelemetryItem(Icons.Default.BatteryFull, "${droneState.batteryLevel}%")
-        TelemetryItem(Icons.Default.Tune, droneState.connectionQuality)
-    }
-}
-
-@Composable
-private fun TelemetryItem(icon: ImageVector, value: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, contentDescription = null, tint = DroneXColors.PrimaryAccent, modifier = Modifier.size(15.dp))
-        Spacer(modifier = Modifier.width(5.dp))
-        Text(value, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-    }
-}
-
-@Composable
-private fun PilotBottomActions(
-    droneState: DroneControlState,
-    onCommand: (DroneCommand) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        BottomCommand(Icons.Default.FlightTakeoff, "TAKEOFF", DroneXColors.Success, Modifier.weight(1f)) {
-            onCommand(DroneCommand.TAKEOFF)
-        }
-        BottomCommand(Icons.Default.PauseCircle, "HOVER", DroneXColors.Info, Modifier.weight(1f)) {
-            onCommand(DroneCommand.HOVER)
-        }
-        BottomCommand(Icons.Default.Home, "RTL", DroneXColors.InfoBlue, Modifier.weight(1f)) {
-            onCommand(DroneCommand.RETURN_HOME)
-        }
-        BottomCommand(Icons.Default.FlightLand, "LAND", DroneXColors.Warning, Modifier.weight(1f)) {
-            onCommand(DroneCommand.LAND)
-        }
-        BottomCommand(
-            icon = if (droneState.isRecording) Icons.Default.StopCircle else Icons.Default.PlayCircle,
-            label = if (droneState.isRecording) "STOP REC" else "RECORD",
-            color = DroneXColors.PinkAccent,
-            modifier = Modifier.weight(1f)
-        ) {
-            onCommand(if (droneState.isRecording) DroneCommand.STOP_RECORDING else DroneCommand.START_RECORDING)
-        }
-    }
-}
-
-@Composable
-private fun BottomCommand(
-    icon: ImageVector,
-    label: String,
-    color: Color,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
+private fun GameButton(label: String, subLabel: String, color: Color, onClick: () -> Unit) {
     Button(
         onClick = onClick,
-        modifier = modifier.height(48.dp),
-        shape = RoundedCornerShape(8.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = color.copy(alpha = 0.14f), contentColor = color),
-        contentPadding = PaddingValues(horizontal = 8.dp)
+        modifier = Modifier.size(58.dp),
+        shape = CircleShape,
+        contentPadding = PaddingValues(0.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = color.copy(alpha = 0.92f), contentColor = Color.Black)
     ) {
-        Icon(icon, contentDescription = label, modifier = Modifier.size(17.dp))
-        Spacer(Modifier.width(6.dp))
-        Text(label, fontWeight = FontWeight.Black, fontSize = 11.sp, maxLines = 1)
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(label, fontSize = 16.sp, fontWeight = FontWeight.Black, lineHeight = 16.sp)
+            Text(subLabel, fontSize = 8.sp, fontWeight = FontWeight.Black, lineHeight = 8.sp)
+        }
     }
 }
 
 @Composable
-private fun EmergencyOverlay(onUnlockSafety: () -> Unit) {
+private fun ShoulderButton(label: String, color: Color, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier.width(72.dp).height(38.dp),
+        shape = RoundedCornerShape(20.dp),
+        contentPadding = PaddingValues(0.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = PilotPanel.copy(alpha = 0.7f), contentColor = color)
+    ) {
+        Text(label, fontWeight = FontWeight.Black, fontSize = 13.sp)
+    }
+}
+
+@Composable
+private fun PilotBottomStrip(
+    droneState: DroneControlState,
+    telemetry: Telemetry?,
+    leftStick: Offset,
+    rightStick: Offset,
+    modifier: Modifier = Modifier
+) {
+    Surface(color = PilotPanel.copy(alpha = 0.85f), shape = RoundedCornerShape(28.dp), modifier = modifier, border = androidx.compose.foundation.BorderStroke(1.dp, PilotStroke.copy(alpha = 0.3f))) {
+        Row(
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            StripItem("ALT", "${telemetry?.altitude?.roundToInt() ?: 0} m")
+            StripItem("L", "${leftStick.x.formatAxis()}, ${leftStick.y.formatAxis()}")
+            StripItem("R", "${rightStick.x.formatAxis()}, ${rightStick.y.formatAxis()}")
+            StripItem("REC", if (droneState.isRecording) "ON" else "OFF")
+        }
+    }
+}
+
+@Composable
+private fun StripItem(label: String, value: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, color = PilotText.copy(alpha = 0.6f), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+        Text(value, color = PilotText, fontSize = 11.sp, fontWeight = FontWeight.Black)
+    }
+}
+
+@Composable
+private fun SafetyOverlay(onUnlockSafety: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.76f)),
+            .background(Color.Black.copy(alpha = 0.82f)),
         contentAlignment = Alignment.Center
     ) {
-        Surface(
-            color = DroneXColors.Critical.copy(alpha = 0.96f),
-            shape = RoundedCornerShape(12.dp)
-        ) {
+        Surface(color = DroneXColors.Critical, shape = RoundedCornerShape(14.dp)) {
             Column(
                 modifier = Modifier.padding(28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Icon(Icons.Default.Warning, contentDescription = null, tint = Color.White, modifier = Modifier.size(72.dp))
-                Text("MOTORS STOPPED", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Black)
-                Text("Safety lock is active. Disarm before resuming.", color = Color.White.copy(alpha = 0.82f), fontSize = 13.sp)
+                Icon(Icons.Default.StopCircle, contentDescription = null, tint = Color.White, modifier = Modifier.size(72.dp))
+                Text("CONTROL LOCKED", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Black)
                 Button(
                     onClick = onUnlockSafety,
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(22.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = DroneXColors.Critical)
                 ) {
-                    Text("UNLOCK AND DISARM", fontWeight = FontWeight.Black)
+                    Text("UNLOCK", fontWeight = FontWeight.Black)
                 }
             }
         }
     }
 }
+
+private fun ConnectionProfile.defaultPilotStreamUrl(): String {
+    return when (mode) {
+        ConnectionMode.ESP32_WIFI -> "http://$ipAddress:81/stream"
+        ConnectionMode.SIMULATION -> "http://$ipAddress:81/stream"
+        ConnectionMode.BLUETOOTH -> ""
+    }
+}
+
+private fun Float.formatAxis(): String = String.format("%.2f", this)
+
+// Theme Colors for Pilot HUD
+val PilotStageBrush = Brush.verticalGradient(
+    listOf(Color(0xFF1C1F22), Color(0xFF282C31))
+)
+val PilotPanel = Color(0xFF373C41)
+val PilotPanelHigh = Color(0xFF4A5057)
+val PilotStroke = Color(0xFF5E656C)
+val PilotText = Color(0xFFECEFF1)
+val PilotMuted = Color(0xFFB0BEC5)

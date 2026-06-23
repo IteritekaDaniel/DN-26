@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.RocketLaunch
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
@@ -71,12 +72,14 @@ import com.example.dn_26.presentation.ui.screen.FlightMapScreen
 import com.example.dn_26.presentation.ui.screen.MissionControlDashboardScreen
 import com.example.dn_26.presentation.ui.screen.MissionLogsScreen
 import com.example.dn_26.presentation.ui.screen.SettingsProScreen
+import com.example.dn_26.presentation.ui.screen.VisionControlScreen
 import com.example.dn_26.presentation.ui.theme.DroneXColors
 import com.example.dn_26.presentation.ui.theme.DroneXProTheme
 import com.example.dn_26.presentation.viewmodel.AIViewModel
 import com.example.dn_26.presentation.viewmodel.AlertViewModel
 import com.example.dn_26.presentation.viewmodel.DroneControlViewModel
 import com.example.dn_26.presentation.viewmodel.TelemetryViewModel
+import com.example.dn_26.presentation.viewmodel.VisionAIViewModel
 
 class MainActivity : ComponentActivity() {
 
@@ -84,6 +87,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var telemetryViewModel: TelemetryViewModel
     private lateinit var alertViewModel: AlertViewModel
     private lateinit var aiViewModel: AIViewModel
+    private lateinit var visionAIViewModel: VisionAIViewModel
 
     private val gamepadHandler = PhysicalGamepadHandler()
     private val permissionsLauncher = registerForActivityResult(
@@ -156,23 +160,24 @@ class MainActivity : ComponentActivity() {
             ) {
                 NavigationItem(currentScreen == 0, { currentScreen = 0 }, Icons.Default.Dashboard, "DASH")
                 NavigationItem(currentScreen == 1, { currentScreen = 1 }, Icons.Default.Gamepad, "PILOT")
-                NavigationItem(currentScreen == 2, { currentScreen = 2 }, Icons.Default.AutoAwesome, "AI")
-                NavigationItem(currentScreen == 3, { currentScreen = 3 }, Icons.Default.Analytics, "DATA")
-                NavigationItem(currentScreen == 4, { currentScreen = 4 }, Icons.Default.Map, "MAP")
-                NavigationItem(currentScreen == 5, { currentScreen = 5 }, Icons.Default.RocketLaunch, "FLEET")
-                NavigationItem(currentScreen == 6, { currentScreen = 6 }, Icons.Default.BatteryChargingFull, "POWER")
-                NavigationItem(currentScreen == 7, { currentScreen = 7 }, Icons.AutoMirrored.Filled.Assignment, "LOGS")
+                NavigationItem(currentScreen == 2, { currentScreen = 2 }, Icons.Default.Videocam, "FPV")
+                NavigationItem(currentScreen == 3, { currentScreen = 3 }, Icons.Default.AutoAwesome, "AI")
+                NavigationItem(currentScreen == 4, { currentScreen = 4 }, Icons.Default.Analytics, "DATA")
+                NavigationItem(currentScreen == 5, { currentScreen = 5 }, Icons.Default.Map, "MAP")
+                NavigationItem(currentScreen == 6, { currentScreen = 6 }, Icons.Default.RocketLaunch, "FLEET")
+                NavigationItem(currentScreen == 7, { currentScreen = 7 }, Icons.Default.BatteryChargingFull, "POWER")
+                NavigationItem(currentScreen == 8, { currentScreen = 8 }, Icons.AutoMirrored.Filled.Assignment, "LOGS")
 
                 Spacer(Modifier.weight(1f))
 
-                NavigationItem(currentScreen == 8, { currentScreen = 8 }, Icons.Default.Settings, "SYS")
+                NavigationItem(currentScreen == 9, { currentScreen = 9 }, Icons.Default.Settings, "SYS")
             }
 
             Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
                 TopParameterBar(
                     telemetry = telemetryState.latestTelemetry,
                     droneState = droneControlState,
-                    onQuickSettingsClick = { currentScreen = 8 }
+                    onQuickSettingsClick = { currentScreen = 9 }
                 )
 
                 Box(modifier = Modifier.fillMaxSize()) {
@@ -201,9 +206,9 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                             onNavigateToControl = { currentScreen = 1 },
-                            onNavigateToMap = { currentScreen = 4 },
-                            onNavigateToAnalytics = { currentScreen = 3 },
-                            onNavigateToSettings = { currentScreen = 8 }
+                            onNavigateToMap = { currentScreen = 5 },
+                            onNavigateToAnalytics = { currentScreen = 4 },
+                            onNavigateToSettings = { currentScreen = 9 }
                         )
                         1 -> AdvancedFlightControlScreen(
                             droneState = droneControlState,
@@ -227,17 +232,33 @@ class MainActivity : ComponentActivity() {
                                 droneControlViewModel.updateJoystickInput(x, y, z, rotation)
                             }
                         )
-                        2 -> AIAnalysisScreen(
+                        2 -> VisionControlScreen(
+                            droneState = droneControlState,
+                            telemetry = telemetryState.latestTelemetry,
+                            visionViewModel = visionAIViewModel,
+                            onNavigateBack = { currentScreen = 0 },
+                            onCommand = { command ->
+                                if (command == DroneCommand.EMERGENCY_STOP) {
+                                    droneControlViewModel.emergencyStop()
+                                } else {
+                                    droneControlViewModel.executeCommand(command)
+                                }
+                            },
+                            onJoystick = { x, y, z, rotation ->
+                                droneControlViewModel.updateJoystickInput(x, y, z, rotation)
+                            }
+                        )
+                        3 -> AIAnalysisScreen(
                             aiViewModel = aiViewModel,
                             latestTelemetry = telemetryState.latestTelemetry,
                             recentTelemetry = telemetryState.recentTelemetry
                         )
-                        3 -> DataAnalyticsScreen(samples = telemetryState.recentTelemetry)
-                        4 -> FlightMapScreen(onNavigateBack = { currentScreen = 0 })
-                        5 -> FleetManagementScreen()
-                        6 -> EnergyManagementScreen()
-                        7 -> MissionLogsScreen(alertViewModel)
-                        8 -> SettingsProScreen(
+                        4 -> DataAnalyticsScreen(samples = telemetryState.recentTelemetry)
+                        5 -> FlightMapScreen(onNavigateBack = { currentScreen = 0 })
+                        6 -> FleetManagementScreen()
+                        7 -> EnergyManagementScreen()
+                        8 -> MissionLogsScreen(alertViewModel)
+                        9 -> SettingsProScreen(
                             onNavigateBack = { currentScreen = 0 },
                             connectionProfile = droneControlState.connectionProfile,
                             onConnectWifi = { profile ->
@@ -297,6 +318,7 @@ class MainActivity : ComponentActivity() {
             AlertEngine(alertRepo, AlertThresholds(15, 30, 70.0, 55.0, 10, 15.0))
         )
         aiViewModel = AIViewModel(aiService)
+        visionAIViewModel = VisionAIViewModel()
 
         telemetryViewModel.startTelemetryObservation()
     }

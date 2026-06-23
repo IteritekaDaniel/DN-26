@@ -3,8 +3,9 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    id("org.jetbrains.kotlin.plugin.serialization")
-    id("kotlin-kapt")
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -48,18 +49,13 @@ android {
         jvmTarget = "17"
         freeCompilerArgs += listOf(
             "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi",
-            "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
-            "-P", "plugin:androidx.compose.compiler.plugins.kotlin:suppressKotlinVersionCompatibilityCheck=1.9.24"
+            "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api"
         )
     }
 
     buildFeatures {
         compose = true
         buildConfig = true
-    }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.15" // Aligned with Kotlin 1.9.24
     }
 
     packaging {
@@ -77,16 +73,16 @@ dependencies {
     implementation(libs.androidx.activity)
 
     // Lifecycle & ViewModel
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.4")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.4")
 
     // Navigation
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
     // Jetpack Compose
-    val composeBom = platform("androidx.compose:compose-bom:2024.05.00")
+    val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
@@ -110,12 +106,12 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-kotlinx-serialization:2.11.0")
 
     // Serialization
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.1")
 
-    // Room Database
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    kapt("androidx.room:room-compiler:2.6.1")
+    // Room Database (Using Catalog aliases)
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
 
     // Logging
     implementation("com.jakewharton.timber:timber:5.0.1")
@@ -127,10 +123,6 @@ dependencies {
 
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform("androidx.compose:compose-bom:2024.05.00"))
+    androidTestImplementation(platform("androidx.compose:compose-bom:2024.06.00"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
-}
-
-tasks.register("testClasses") {
-    dependsOn("compileDebugUnitTestSources")
 }

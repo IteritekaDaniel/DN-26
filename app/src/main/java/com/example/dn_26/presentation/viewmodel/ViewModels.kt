@@ -1,5 +1,7 @@
 package com.example.dn_26.presentation.viewmodel
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.dn_26.ai.AIService
@@ -23,10 +25,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.sign
+import kotlin.math.sqrt
 
 data class ControllerTuning(
     val preset: String = "PRECISION",
@@ -531,4 +539,261 @@ class AIViewModel(
             }
         }
     }
+}
+
+data class VisionFinding(
+    val title: String,
+    val description: String,
+    val severity: AlertSeverity = AlertSeverity.LOW,
+    val confidence: Double = 0.0
+)
+
+data class VisionQuestion(
+    val question: String,
+    val answer: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+data class VisionState(
+    val streamUrl: String = "",
+    val snapshotUrl: String = "",
+    val isAnalyzing: Boolean = false,
+    val autoAnalyze: Boolean = false,
+    val lastFrameTimestamp: Long = 0L,
+    val brightness: Double = 0.0,
+    val contrast: Double = 0.0,
+    val sharpness: Double = 0.0,
+    val frameScore: Int = 0,
+    val findings: List<VisionFinding> = emptyList(),
+    val qaHistory: List<VisionQuestion> = emptyList(),
+    val error: String? = null
+)
+
+class VisionAIViewModel : ViewModel() {
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(4, TimeUnit.SECONDS)
+        .readTimeout(5, TimeUnit.SECONDS)
+        .build()
+
+    private val _state = MutableStateFlow(VisionState())
+    val state: StateFlow<VisionState> = _state.asStateFlow()
+
+    fun updateUrls(streamUrl: String, snapshotUrl: String) {
+        _state.update {
+            it.copy(
+                streamUrl = streamUrl.trim(),
+                snapshotUrl = snapshotUrl.trim(),
+                error = null
+            )
+        }
+    }
+
+    fun setAutoAnalyze(enabled: Boolean) {
+        _state.update { it.copy(autoAnalyze = enabled) }
+    }
+
+    fun analyzeSnapshot(snapshotUrl: String = _state.value.snapshotUrl) {
+        if (snapshotUrl.isBlank()) {
+            _state.update { it.copy(error = "Snapshot URL is empty") }
+            return
+        }
+
+        viewModelScope.launch {
+            _state.update { it.copy(isAnalyzing = true, error = null) }
+            runCatching {
+                val bitmap = fetchBitmap(snapshotUrl)
+                analyzeBitmap(bitmap)
+            }.onSuccess { analysis ->
+                _state.update {
+                    it.copy(
+                        isAnalyzing = false,
+                        lastFrameTimestamp = System.currentTimeMillis(),
+                        brightness = analysis.brightness,
+                        contrast = analysis.contrast,
+                        sharpness = analysis.sharpness,
+                        frameScore = analysis.frameScore,
+                        findings = analysis.findings,
+                        error = null
+                    )
+                }
+            }.onFailure { error ->
+                _state.update {
+                    it.copy(
+                        isAnalyzing = false,
+                        error = error.message ?: "Vision analysis failed"
+                    )
+                }
+            }
+        }
+    }
+
+    fun askQuestion(question: String) {
+        val cleanQuestion = question.trim()
+        if (cleanQuestion.isBlank()) return
+
+        val current = _state.value
+        val answer = buildVisionAnswer(cleanQuestion, current)
+        _state.update {
+            it.copy(
+                qaHistory = (listOf(VisionQuestion(cleanQuestion, answer)) + it.qaHistory).take(8)
+            )
+        }
+    }
+
+    private suspend fun fetchBitmap(url: String): Bitmap = withContext(Dispatchers.IO) {
+        val request = Request.Builder().url(url).build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("Snapshot request failed: HTTP ${response.code}")
+            val bytes = response.body?.bytes() ?: error("Snapshot response is empty")
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                ?: error("Snapshot is not a decodable image")
+        }
+    }
+
+    private fun analyzeBitmap(bitmap: Bitmap): VisionFrameAnalysis {
+        val width = bitmap.width
+        val height = bitmap.height
+        val step = (maxOf(width, height) / 72).coerceAtLeast(1)
+        var count = 0
+        var sum = 0.0
+        var sumSquare = 0.0
+        var edgeSum = 0.0
+        var redOrangeCount = 0
+
+        for (y in 0 until height step step) {
+            for (x in 0 until width step step) {
+                val pixel = bitmap.getPixel(x, y)
+                val red = (pixel shr 16) and 0xFF
+                val green = (pixel shr 8) and 0xFF
+                val blue = pixel and 0xFF
+                val luminance = red * 0.299 + green * 0.587 + blue * 0.114
+                sum += luminance
+                sumSquare += luminance * luminance
+
+                if (x + step < width) {
+                    edgeSum += abs(luminance - bitmap.getPixel(x + step, y).luma())
+                }
+                if (y + step < height) {
+                    edgeSum += abs(luminance - bitmap.getPixel(x, y + step).luma())
+                }
+
+                if (red > 150 && red > green * 1.25 && green > blue * 1.1) {
+                    redOrangeCount++
+                }
+                count++
+            }
+        }
+
+        val safeCount = count.coerceAtLeast(1)
+        val avg = sum / safeCount
+        val variance = (sumSquare / safeCount) - avg * avg
+        val brightness = (avg / 255.0).coerceIn(0.0, 1.0)
+        val contrast = (sqrt(variance.coerceAtLeast(0.0)) / 128.0).coerceIn(0.0, 1.0)
+        val sharpness = (edgeSum / (safeCount * 255.0)).coerceIn(0.0, 1.0)
+        val redOrangeRatio = redOrangeCount / safeCount.toDouble()
+
+        val findings = mutableListOf<VisionFinding>()
+        if (brightness < 0.08 && contrast < 0.12) {
+            findings += VisionFinding(
+                title = "Possible lens obstruction",
+                description = "The frame is extremely dark with very low contrast.",
+                severity = AlertSeverity.CRITICAL,
+                confidence = 0.88
+            )
+        } else if (brightness < 0.18) {
+            findings += VisionFinding(
+                title = "Low visibility",
+                description = "The camera image is too dark for reliable visual navigation.",
+                severity = AlertSeverity.MEDIUM,
+                confidence = 0.78
+            )
+        }
+        if (brightness > 0.88) {
+            findings += VisionFinding(
+                title = "Overexposure",
+                description = "The image is washed out; obstacle and landing-zone detail may be lost.",
+                severity = AlertSeverity.MEDIUM,
+                confidence = 0.76
+            )
+        }
+        if (sharpness < 0.07 && brightness > 0.16) {
+            findings += VisionFinding(
+                title = "Blur or vibration",
+                description = "Low edge energy suggests motion blur, lens focus issue, or frame vibration.",
+                severity = AlertSeverity.MEDIUM,
+                confidence = 0.72
+            )
+        }
+        if (contrast < 0.11 && brightness in 0.18..0.82) {
+            findings += VisionFinding(
+                title = "Low contrast scene",
+                description = "Scene contrast is weak; visual anomaly detection will be less confident.",
+                severity = AlertSeverity.LOW,
+                confidence = 0.66
+            )
+        }
+        if (redOrangeRatio > 0.22) {
+            findings += VisionFinding(
+                title = "Red/orange dominance",
+                description = "Large warm-color regions detected. Verify if this is terrain, warning light, heat source, or fire-like object.",
+                severity = AlertSeverity.MEDIUM,
+                confidence = redOrangeRatio.coerceIn(0.55, 0.92)
+            )
+        }
+
+        var penalty = 0
+        for (finding in findings) {
+            penalty += when (finding.severity) {
+                AlertSeverity.CRITICAL -> 34
+                AlertSeverity.MEDIUM -> 18
+                AlertSeverity.LOW -> 9
+            }
+        }
+        val frameScore = (100 - penalty).coerceIn(0, 100)
+        return VisionFrameAnalysis(brightness, contrast, sharpness, frameScore, findings)
+    }
+
+    private fun buildVisionAnswer(question: String, state: VisionState): String {
+        val q = question.lowercase()
+        if (state.lastFrameTimestamp == 0L) {
+            return "I need at least one analyzed snapshot first. Tap Analyze Frame or enable Auto AI."
+        }
+
+        val strongestFinding = state.findings.maxByOrNull { it.confidence }
+        return when {
+            q.contains("danger") || q.contains("risk") || q.contains("anomal") ->
+                if (state.findings.isEmpty()) {
+                    "No visual anomaly is detected in the latest analyzed frame. Frame quality score is ${state.frameScore}/100."
+                } else {
+                    "Main visual concern: ${strongestFinding?.title}. ${strongestFinding?.description} Frame quality score is ${state.frameScore}/100."
+                }
+            q.contains("flou") || q.contains("blur") || q.contains("vibration") ->
+                "Sharpness is ${state.sharpness.formatPercent()}. ${state.findings.firstOrNull { it.title.contains("Blur") }?.description ?: "No strong blur/vibration signature is detected."}"
+            q.contains("lumi") || q.contains("dark") || q.contains("night") || q.contains("exposure") ->
+                "Brightness is ${state.brightness.formatPercent()} and contrast is ${state.contrast.formatPercent()}. ${state.findings.firstOrNull { it.title.contains("visibility") || it.title.contains("Overexposure") || it.title.contains("obstruction") }?.description ?: "Exposure looks usable for basic FPV monitoring."}"
+            q.contains("enregistr") || q.contains("record") || q.contains("video") ->
+                "Recording is controlled from the FPV screen with the REC button. For full real-time DVR, the ESP32 or companion camera should write the stream to SD/storage while the app sends START_RECORDING and STOP_RECORDING."
+            q.contains("api") || q.contains("model") || q.contains("objet") ->
+                "This app now performs local image-quality and anomaly heuristics. For object detection, cracks, people, smoke, or vehicle recognition, plug a vision API or an on-device TensorFlow Lite model into this VisionAIViewModel."
+            else ->
+                "Latest frame score is ${state.frameScore}/100. Brightness ${state.brightness.formatPercent()}, contrast ${state.contrast.formatPercent()}, sharpness ${state.sharpness.formatPercent()}. ${strongestFinding?.description ?: "No visual anomaly detected."}"
+        }
+    }
+
+    private fun Int.luma(): Double {
+        val red = (this shr 16) and 0xFF
+        val green = (this shr 8) and 0xFF
+        val blue = this and 0xFF
+        return red * 0.299 + green * 0.587 + blue * 0.114
+    }
+
+    private fun Double.formatPercent(): String = "${(this * 100).toInt()}%"
+
+    private data class VisionFrameAnalysis(
+        val brightness: Double,
+        val contrast: Double,
+        val sharpness: Double,
+        val frameScore: Int,
+        val findings: List<VisionFinding>
+    )
 }
